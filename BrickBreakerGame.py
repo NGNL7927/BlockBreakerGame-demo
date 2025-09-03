@@ -1,13 +1,19 @@
-from turtle import Turtle
+# -*- coding: UTF-8 -*-
+#  打砖块游戏     牢粟倾情巨献
+# 联系方式:suqb7927@gmail.com
+from abc import ABC,abstractmethod
 import pygame
-import time
+import random
 import math
 from enum import Enum,auto#enumerate
 from COLORS import Colors
-pygame.init()
+#全局变量
 WIDTH=600
 HEIGHT=WIDTH*1
 MAX_LIFE=3
+
+# 全局初始化
+pygame.init()
 pygame.display.set_caption("打砖块")
 screen=pygame.Surface((WIDTH,HEIGHT))
 physical_screen=pygame.display.set_mode((600,600),pygame.RESIZABLE)
@@ -26,14 +32,18 @@ volume_off_img=pygame.image.load(r"kenney_puzzle-pack\volume-off.svg").convert_a
 fullscreen_img=pygame.image.load(r"kenney_puzzle-pack\fullscreen.svg").convert_alpha()
 fullscreen_exit_img=pygame.image.load(r"kenney_puzzle-pack\fullscreen-exit.svg").convert_alpha()
 ball_img=pygame.image.load(r"kenney_puzzle-pack\png\ballBlue.png").convert_alpha()
-
-brick_sound=pygame.mixer.Sound(r"sound\audio_593a2d86e9.mp3")
+brick_sound=pygame.mixer.Sound(r"Sound\audio_593a2d86e9.mp3")
+start_font=pygame.font.Font('Fonts\HanYiLingXinTiJian-1.ttf',50)
+tutorial_font=pygame.font.Font('Fonts\SIMHEI.TTF',24)
+brick_radius=pow(pow(brick_imgs["blue"].get_rect().width,2)+pow(brick_imgs["blue"].get_rect().height,2),0.5)/2  
 
 
 class GameState(Enum):
-    GAMING=0
-    PAUSE=1
-    END=2
+    START=auto()
+    GAMING=auto()
+    PAUSE=auto()
+    END=auto()
+    EXIT=auto()
 
 def squa_distance(p1,p2):
     return sum(pow(a-b,2) for a,b in zip(p1,p2))
@@ -62,7 +72,7 @@ class Paddle:
             self.rect.left-=self.velocity
         if pygame.key.get_pressed()[pygame.K_RIGHT] and self.rect.right<=WIDTH:
             self.rect.right+=self.velocity
-brick_radius=pow(pow(brick_imgs["blue"].get_rect().width,2)+pow(brick_imgs["blue"].get_rect().height,2),0.5)/2  
+
 class Brick:
     __slots__=("x","y","image","rect","btype","is_visible","radius")
     class BType(Enum):
@@ -140,6 +150,7 @@ class Ball:
         return self._angle
     @angle.setter
     def angle(self,new_val):
+        brick_sound.play()
         print(f"angle从{self._angle:.2f}变为{new_val:.2f}")
         self._angle = new_val
     def move_to_paddle(self,paddle:Paddle):#重置小球位置
@@ -157,7 +168,7 @@ class Ball:
             # 四舍五入后更新rect位置
             self.rect.centerx = round(self.x)
             self.rect.centery = round(self.y)
-    def collision(self,paddle:Paddle,bricks:list[Brick]=None):
+    def collision(self,paddle:Paddle,bricks:list[Brick]=None):#碰撞判断函数
         #边界碰撞
         if self.rect.right>=WIDTH and (self.angle<90 or self.angle>270):
             self.angle=angle_change(90,self.angle)
@@ -168,7 +179,6 @@ class Ball:
         elif self.rect.bottom>=HEIGHT:
             life_change(-1,self)
 
-        
         #挡板碰撞
         if self.rect.colliderect(paddle.rect):
             if self.angle>180:#防止重复判断
@@ -191,7 +201,13 @@ class Ball:
         #y = 90 - 60 * (x / MAX)**2 * (1 if x >= 0 else -1)#二次函数
         #y = 90 - 45 * (2 ** (x / MAX) - 1) if x >= 0 else 90 + 45 * (2 ** (-x / MAX) - 1)#指数
         y=-0.95*x+90#线性
-        
+        keys=pygame.key.get_pressed()
+        if keys[pygame.K_LEFT]:
+            y-=random.uniform(1,10)
+            print("z")
+        elif keys[pygame.K_RIGHT]:
+            y+=random.uniform(1,10)
+            print("you")
         self.angle=y
         print("碰撞挡板结束")
     def collision_rect(self,brick):#矩形碰撞小球函数
@@ -213,7 +229,7 @@ class Ball:
             if vertex_index==1 or vertex_index==2:
                 wall=180-wall
             self.angle=angle_change(wall,self.angle)
-        brick_sound.play()
+        
         print("碰撞砖块结束")
             #k=-1/()
     def dead(self):
@@ -295,27 +311,30 @@ class LifeBall:
                 life_ball.update_ani_shrink(dt)
             life_ball.draw(screen)
 
-class Button():
+class Button(ABC):
     def __init__(self,image:pygame.Surface,image_pressed:pygame.Surface,rect:pygame.Rect):
+        if not isinstance(rect,pygame.Rect):
+            raise TypeError(f"sb,rect is not Rect,got {type(rect).__name__}")
         self.image=image
         self.image_pressed=image_pressed
         self.rect=rect
         self.is_hover=False
         self.is_pressed=False
+    @abstractmethod
     def update(self,event:pygame.event.Event):
+        if event.type==pygame.MOUSEBUTTONDOWN and self.rect.collidepoint(mouse_get_pos()):
+            return self.on_click()
+    @abstractmethod
+    def on_click(self):
         pass
+    @abstractmethod
     def draw(self):
         pass
 class FullscreenButton(Button):
     def __init__(self,image:pygame.Surface,image_pressed:pygame.Surface,rect:pygame.Rect):
-
         super().__init__(image,image_pressed,rect)
-    def update(self,event:pygame.event.Event):
-        if event.type==pygame.MOUSEBUTTONDOWN:
-            if self.rect.collidepoint(mouse_get_pos()):
-
-                self.on_click()
-                
+    def update(self, event):
+        return super().update(event)
     def on_click(self):
         self.is_pressed=True if self.is_pressed==False else False
         pygame.display.toggle_fullscreen()#切换显示模式
@@ -335,16 +354,17 @@ class VolumeButton(Button):
         if event.type==pygame.MOUSEBUTTONDOWN:
             if self.rect.collidepoint(mouse_get_pos()):
                 self.on_click()
+                print(self.rect)
                 
     def on_click(self):
         
         self.is_pressed=True if self.is_pressed==False else False
         if self.is_pressed:
-            pygame.mixer.pause
-            print("暂停播放所有声道")
+            brick_sound.set_volume(0)
+            print("设置音量为0")
         else:
-            pygame.mixer.unpause
-            print("恢复播放所有声道")
+            brick_sound.set_volume(1)
+            print("设置音量为1")
     def draw(self,screen):
         if self.is_pressed:
             image=pygame.transform.scale(self.image_pressed,(self.rect.width,self.rect.height))
@@ -353,8 +373,47 @@ class VolumeButton(Button):
             image=pygame.transform.scale(self.image,(self.rect.width,self.rect.height))
             screen.blit(image,self.rect)
 
+class TextButton(Button):
+    def __init__(self, rect ,text,color,hover_color,font:pygame.font.Font,font_color=Colors.RED):
+        super().__init__(None,None,rect=rect)
+        self.color=color
+        self.hover_color=hover_color
+        self.font=font
+        self.font_color=font_color
+        self.text_surface=self.font.render(text,1,self.font_color)
+        self.text_rect=self.text_surface.get_rect(center=self.rect.center)
+        self.is_triggered=False
+    def update(self, event):
+        super().update(event)
+        if self.rect.collidepoint(mouse_get_pos()):
+            self.is_hover=True
+        else:
+            self.is_hover=False
+        return 0
 
+    def on_click(self):
+        return 1
+    def draw(self):
+        if self.is_hover==False:
+            pygame.draw.rect(screen,self.color,self.rect)
+        else:
+            pygame.draw.rect(screen,self.hover_color,self.rect)
+        screen.blit(self.text_surface,self.text_rect)
 
+# class Text():#文字类，废弃
+#     def __init__(self,centerpoint,text='None',font=tutorial_font,font_color=Colors.WHITE):
+#         self.font=font
+#         self.centerpoint=centerpoint
+#         self.font_color=font_color
+#         self.text_surface=self.font.render(text,1,self.font_color)
+#         self.text_rect=self.text_surface.get_rect(center=centerpoint)
+#     def draw(self):
+#         screen.blit(self.text_surface,self.text_rect)
+def creat_text(centerpoint,text,font=tutorial_font,font_color=Colors.WHITE):
+    text_surface=font.render(text,1,font_color)
+    text_rect=text_surface.get_rect(center=centerpoint)
+    screen.blit(text_surface,text_rect)
+    
 
 
 def draw_top_ui(screen):
@@ -367,13 +426,9 @@ def life_change(change:int,ball:Ball):
     life_is_change=True
     pre_life=life
     life+=change
-
+    if life<=0:
+        current_state=GameState.END
     print(f"生命值变化{change}，剩余生命值: {life}")
-
-    # 检查游戏是否结束
-    if life <= 0:
-        current_state = GameState.END
-        print("游戏结束，生命值耗尽!")
     #生命球动画 
     if life<pre_life:
         life_balls[pre_life-1-1].start_ani_shrink()
@@ -403,8 +458,12 @@ def create_mouse_get_pos(scale_ratio=1,scale_w=0,scale_h=0,phys_w=0,phys_h=0):
         return mouse_pos_x,mouse_pos_y
     return mouse_get_pos
 
+#游戏初始化
 mouse_get_pos=create_mouse_get_pos()
 top=13
+startbutton=TextButton(pygame.Rect(100,200,400,100),"开始游戏",Colors.WHITE,Colors.PINK,start_font)
+yes_button=TextButton(pygame.Rect(210,290,70,45),"是",Colors.LIGHTGREEN,Colors.GREEN,tutorial_font,Colors.BLACK)
+no_button=TextButton(pygame.Rect(320,290,70,45),"否",Colors.LIGHTGREEN,Colors.GREEN,tutorial_font,Colors.BLACK)
 volumebutton=VolumeButton(volume_on_img,volume_off_img,pygame.Rect(560,top,21,21))
 fullscreen_button=FullscreenButton(fullscreen_img,fullscreen_exit_img,pygame.Rect(510,top,21,21))
 paddle0=Paddle(0.191*WIDTH,0.0193*HEIGHT,color=Colors.LIGHTGREEN)
@@ -415,56 +474,112 @@ life=MAX_LIFE+1
 life_change(-1,ball0)
 
 
-current_state= GameState.GAMING
-while current_state==GameState.GAMING:
-    dt=clock.tick(100)
-    #定义速度
-    ball0.velocity=380*dt/1000
-    paddle0.velocity=580*dt/1000
-    for event in pygame.event.get():
-        if event.type==pygame.QUIT:
-            current_state=GameState.END
-        if event.type==pygame.MOUSEBUTTONDOWN:
-            fullscreen_button.update(event)
-            volumebutton.update(event)
-        if event.type==pygame.KEYDOWN:
-            if event.key==pygame.K_SPACE:#空格控制球的移动
-                if ball0.is_move==False:
-                    ball0.angle=45
-                    ball0.is_move=True
-                else:
-                    ball0.is_move=False
+current_state= GameState.START
+while current_state!=GameState.EXIT:
+    print("11111111111111111")
+    while current_state==GameState.START:
+        dt=clock.tick(60)
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                current_state=GameState.EXIT
+            if startbutton.update(event):
+                current_state=GameState.GAMING 
 
-    if(len(bricks)==0):
-        pass
-
-    #背景渲染
-    screen.fill(Colors.BLACK)    
-
-    #碰撞检测+移动
-    if ball0.is_move:
-        ball0.collision(paddle0,bricks)
-        ball0.move()
-        paddle0.move()
-    else:
-        paddle0.move()
-        ball0.move_to_paddle(paddle0)
-    #调试碰撞
-    # if ball0.is_move==0:
-    #     mouse_pos = mouse_get_pos()
-    #     ball0.x = float(mouse_pos[0])
-    #     ball0.y = float(mouse_pos[1])
-    #     ball0.rect.center = (round(ball0.x), round(ball0.y))
-
-    #ui
-    draw_top_ui(screen)
-    LifeBall.draw_life_balls(screen,life_balls,dt)
-    #绘制砖块
-    Brick.draw_bricks(bricks)
-    #绘制球
-    ball0.draw()
-    #绘制挡板
-    paddle0.draw()
+        screen.fill(Colors.BLACK)
+        startbutton.draw()
+        draw_to_real_screen(physical_screen,screen)
+        pygame.display.flip()
     
-    draw_to_real_screen(physical_screen,screen)
-    pygame.display.flip()
+    if current_state==GameState.GAMING:
+        tutorial_display=1
+        life=3
+    while current_state==GameState.GAMING or current_state==GameState.END:
+        dt=clock.tick(120)
+        if life==0:
+            current_state=GameState.END
+        #定义速度
+        ball0.velocity=380*dt/1000
+        paddle0.velocity=580*dt/1000
+        
+        for event in pygame.event.get():
+            if event.type==pygame.QUIT:
+                current_state=GameState.EXIT
+                
+            if event.type==pygame.MOUSEBUTTONDOWN:
+                tutorial_display=0
+                fullscreen_button.update(event)
+                volumebutton.update(event)
+            if event.type==pygame.KEYDOWN:
+                tutorial_display=0
+                if ball0.is_move==False and event.key==pygame.K_UP:
+                    ball0.angle=random.randint(45,85)
+                    ball0.is_move=True
+            if current_state==GameState.END:
+                if yes_button.update(event):
+                    current_state=GameState.START
+                    
+                elif no_button.update(event):
+                    current_state=GameState.EXIT
+                    
+
+                #调试碰撞：空格控制小球启停
+                # if event.key==pygame.K_SPACE:
+                #     if ball0.is_move==False:
+                #         ball0.angle=45
+                #         ball0.is_move=True
+                #     else:
+                #         ball0.is_move=False
+
+        life-=1
+
+        if(len(bricks)==0):
+            pass
+
+        #背景渲染
+        screen.fill(Colors.BLACK)    
+
+        #碰撞检测+移动
+        if ball0.is_move:
+            ball0.collision(paddle0,bricks)
+            ball0.move()
+            paddle0.move()
+        else:
+            paddle0.move()
+            ball0.move_to_paddle(paddle0)
+
+        #调试碰撞：小球跟随鼠标
+        # if ball0.is_move==0:
+        #     mouse_pos = mouse_get_pos()
+        #     ball0.x = float(mouse_pos[0])
+        #     ball0.y = float(mouse_pos[1])
+        #     ball0.rect.center = (round(ball0.x), round(ball0.y))
+
+        #教程
+        if tutorial_display:
+            creat_text((300,300),"左右方向键移动挡板，按上方向键发射小球")
+            creat_text((300,340),"摧毁所有砖块，拿下胜利吧！")
+            creat_text((300,380),"（按任意键继续）")
+        #ui
+        draw_top_ui(screen)
+        LifeBall.draw_life_balls(screen,life_balls,dt)
+        #绘制砖块
+        Brick.draw_bricks(bricks)
+        #绘制球
+        ball0.draw()
+        #绘制挡板
+        paddle0.draw()
+        
+        if life<=0:
+            life=0
+            ball0.is_move=False
+            pygame.draw.rect(screen,Colors.SALMON,(175,220,250,140))
+            creat_text((300,250)," 游戏结束，是否重试？")
+            yes_button.draw()
+            no_button.draw()
+            
+            
+        
+        #print(clock.get_fps())
+        draw_to_real_screen(physical_screen,screen)
+        pygame.display.flip()
+        print(current_state)

@@ -169,7 +169,7 @@ class Colors:
     @staticmethod
     def as_rgb(color_name: str):
         """将颜色名转换为 (r, g, b) 元组 (0-255)"""
-        from colors import Colors
+        from COLORS import Colors
         hex_val = getattr(Colors, color_name.upper(), "#FFFFFF").lstrip('#')
         return tuple(int(hex_val[i:i+2], 16) for i in (0, 2, 4))
     
