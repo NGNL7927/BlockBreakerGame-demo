@@ -32,11 +32,12 @@ volume_off_img=pygame.image.load(r"kenney_puzzle-pack\volume-off.svg").convert_a
 fullscreen_img=pygame.image.load(r"kenney_puzzle-pack\fullscreen.svg").convert_alpha()
 fullscreen_exit_img=pygame.image.load(r"kenney_puzzle-pack\fullscreen-exit.svg").convert_alpha()
 ball_img=pygame.image.load(r"kenney_puzzle-pack\png\ballBlue.png").convert_alpha()
+start_bg_img=pygame.transform.smoothscale(pygame.image.load(r"kenney_puzzle-pack\start_background.png").convert_alpha(),(600,600))
+win_bg_img=pygame.transform.smoothscale(pygame.image.load(r"kenney_puzzle-pack\win_background.png").convert_alpha(),(600,600))
 brick_sound=pygame.mixer.Sound(r"Sound\audio_593a2d86e9.mp3")
 start_font=pygame.font.Font('Fonts\HanYiLingXinTiJian-1.ttf',50)
 tutorial_font=pygame.font.Font('Fonts\SIMHEI.TTF',24)
 brick_radius=pow(pow(brick_imgs["blue"].get_rect().width,2)+pow(brick_imgs["blue"].get_rect().height,2),0.5)/2  
-
 
 class GameState(Enum):
     START=auto()
@@ -44,6 +45,7 @@ class GameState(Enum):
     PAUSE=auto()
     END=auto()
     EXIT=auto()
+    WIN=auto()
 
 def squa_distance(p1,p2):
     return sum(pow(a-b,2) for a,b in zip(p1,p2))
@@ -324,9 +326,8 @@ class Button(ABC):
     def update(self,event:pygame.event.Event):
         if event.type==pygame.MOUSEBUTTONDOWN and self.rect.collidepoint(mouse_get_pos()):
             return self.on_click()
-    @abstractmethod
     def on_click(self):
-        pass
+        return 1
     @abstractmethod
     def draw(self):
         pass
@@ -384,7 +385,8 @@ class TextButton(Button):
         self.text_rect=self.text_surface.get_rect(center=self.rect.center)
         self.is_triggered=False
     def update(self, event):
-        super().update(event)
+        if super().update(event):
+            return 1
         if self.rect.collidepoint(mouse_get_pos()):
             self.is_hover=True
         else:
@@ -423,18 +425,22 @@ def life_change(change:int,ball:Ball):
     global life
     global pre_life
     global current_state
-    life_is_change=True
+    if life<=0:
+        print("wrong")
+        return 0
     pre_life=life
     life+=change
-    if life<=0:
-        current_state=GameState.END
+
     print(f"生命值变化{change}，剩余生命值: {life}")
     #生命球动画 
     if life<pre_life:
         life_balls[pre_life-1-1].start_ani_shrink()
     else:
             life_balls[life-1-1].start_ani_expand()
-    ball.is_move=False
+    ball.is_move=False#重新开始，小球复位
+    if life==0:
+        current_state=GameState.END
+        print("生命值归零，游戏结束")
 
 def draw_to_real_screen(physical_screen,virtual_canvas):
     global mouse_get_pos
@@ -446,7 +452,7 @@ def draw_to_real_screen(physical_screen,virtual_canvas):
     scale_w=int(virt_w*scale_ratio)
     scale_h=int(virt_h*scale_ratio)
     canvas=pygame.transform.scale(virtual_canvas,(scale_w,scale_h))
-    physical_screen.fill(Colors.BLACK)
+    physical_screen.fill((20,20,20))
     physical_screen.blit(canvas,((phys_w-scale_w)//2,(phys_h-scale_h)//2))
     mouse_get_pos=create_mouse_get_pos(scale_ratio,scale_w,scale_h,phys_w,phys_h)
 
@@ -459,9 +465,10 @@ def create_mouse_get_pos(scale_ratio=1,scale_w=0,scale_h=0,phys_w=0,phys_h=0):
     return mouse_get_pos
 
 #游戏初始化
+break_flag=False
 mouse_get_pos=create_mouse_get_pos()
 top=13
-startbutton=TextButton(pygame.Rect(100,200,400,100),"开始游戏",Colors.WHITE,Colors.PINK,start_font)
+startbutton=TextButton(pygame.Rect(100,235,400,100),"开始游戏",Colors.WHITE,Colors.PINK,start_font)
 yes_button=TextButton(pygame.Rect(210,290,70,45),"是",Colors.LIGHTGREEN,Colors.GREEN,tutorial_font,Colors.BLACK)
 no_button=TextButton(pygame.Rect(320,290,70,45),"否",Colors.LIGHTGREEN,Colors.GREEN,tutorial_font,Colors.BLACK)
 volumebutton=VolumeButton(volume_on_img,volume_off_img,pygame.Rect(560,top,21,21))
@@ -473,10 +480,12 @@ life_balls=LifeBall.create_life_balls(MAX_LIFE)
 life=MAX_LIFE+1
 life_change(-1,ball0)
 
-
+count=0
 current_state= GameState.START
 while current_state!=GameState.EXIT:
-    print("11111111111111111")
+    
+    if current_state==GameState.START:
+        print("进入开始界面")
     while current_state==GameState.START:
         dt=clock.tick(60)
         for event in pygame.event.get():
@@ -484,13 +493,18 @@ while current_state!=GameState.EXIT:
                 current_state=GameState.EXIT
             if startbutton.update(event):
                 current_state=GameState.GAMING 
-
+        
+        #开始界面渲染
         screen.fill(Colors.BLACK)
+
+        screen.blit(start_bg_img,(0,0))
+        
         startbutton.draw()
         draw_to_real_screen(physical_screen,screen)
         pygame.display.flip()
     
     if current_state==GameState.GAMING:
+        print("进入游戏界面")
         tutorial_display=1
         life=3
     while current_state==GameState.GAMING or current_state==GameState.END:
@@ -517,10 +531,13 @@ while current_state!=GameState.EXIT:
             if current_state==GameState.END:
                 if yes_button.update(event):
                     current_state=GameState.START
-                    
+                    break_flag=True
                 elif no_button.update(event):
                     current_state=GameState.EXIT
-                    
+                    break_flag=True
+        if break_flag:
+            break_flag=False
+            break
 
                 #调试碰撞：空格控制小球启停
                 # if event.key==pygame.K_SPACE:
@@ -530,10 +547,12 @@ while current_state!=GameState.EXIT:
                 #     else:
                 #         ball0.is_move=False
 
-        life-=1
+        
 
         if(len(bricks)==0):
-            pass
+            current_state=GameState.WIN
+            print("恭喜你胜利！")
+            break
 
         #背景渲染
         screen.fill(Colors.BLACK)    
@@ -582,4 +601,21 @@ while current_state!=GameState.EXIT:
         #print(clock.get_fps())
         draw_to_real_screen(physical_screen,screen)
         pygame.display.flip()
-        print(current_state)
+
+    if current_state==GameState.WIN:
+        print("进入胜利界面")
+        bg_alpha=0
+    while current_state==GameState.WIN:
+        dt=clock.tick(60)
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                current_state=GameState.EXIT
+
+        
+        #胜利界面渲染
+        screen.fill(Colors.BLACK)
+        bg_alpha+=260*dt/1000
+        win_bg_img.set_alpha(bg_alpha)
+        screen.blit(win_bg_img,(0,0))
+        draw_to_real_screen(physical_screen,screen)
+        pygame.display.flip()
